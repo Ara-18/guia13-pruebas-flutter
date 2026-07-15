@@ -1,0 +1,43 @@
+name: Flutter CI - Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Instalar dependencias
+        run: flutter pub get
+
+      - name: Analizar código estático
+        run: flutter analyze
+
+      - name: Instalar lcov (para filtrar y resumir cobertura)
+        run: sudo apt-get update && sudo apt-get install -y lcov bc
+
+      - name: Dar permisos de ejecución al script de cobertura
+        run: chmod +x scripts/check_coverage.sh
+
+      - name: Ejecutar pruebas y validar umbral de cobertura (85%)
+        run: ./scripts/check_coverage.sh
+
+      - name: Subir reporte de cobertura como artefacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/clean_lcov.info
