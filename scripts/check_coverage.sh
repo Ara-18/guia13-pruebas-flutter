@@ -1,51 +1,44 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
 MIN_COVERAGE=85
-LCOV_RAW="coverage/lcov.info"
-LCOV_CLEAN="coverage/clean_lcov.info"
+LCOV_FILE="coverage/lcov.info"
+CLEAN_LCOV_FILE="coverage/clean_lcov.info"
 
-echo "==> Ejecutando pruebas de Flutter con cobertura..."
-flutter test --coverage > /dev/null
+echo "-> Ejecutando pruebas de Flutter con cobertura..."
+flutter test --coverage
 
-if [ ! -f "$LCOV_RAW" ]; then
-  echo "ERROR: No se generó el archivo $LCOV_RAW. Abortando."
+if [ ! -f "$LCOV_FILE" ]; then
+  echo "ERROR: no se generó el archivo $LCOV_FILE"
   exit 1
 fi
 
-echo "==> Filtrando archivos autogenerados y de configuración..."
-lcov --remove "$LCOV_RAW" \
+echo "-> Filtrando archivos autogenerados..."
+lcov --remove "$LCOV_FILE" \
   'lib/main.dart' \
   'lib/*/*.g.dart' \
   'lib/*/*.freezed.dart' \
   'lib/generated/*' \
-  -o "$LCOV_CLEAN" \
-  --ignore-errors unused > /dev/null
+  -o "$CLEAN_LCOV_FILE" \
+  --ignore-errors unused
 
-echo "==> Calculando porcentaje de cobertura neta..."
-SUMMARY_LINE=$(lcov --summary "$LCOV_CLEAN" 2>/dev/null | grep "lines" || true)
+echo "-> Calculando porcentaje de cobertura neta..."
+COVERAGE_SUMMARY=$(lcov --summary "$CLEAN_LCOV_FILE" 2>&1)
+COVERAGE_PERCENT=$(echo "$COVERAGE_SUMMARY" | grep "lines" | grep -oP '\d+\.\d+(?=%)')
 
-if [ -z "$SUMMARY_LINE" ]; then
-  echo "ERROR: No se pudo calcular el resumen de cobertura."
+if [ -z "$COVERAGE_PERCENT" ]; then
+  echo "ERROR: no se pudo calcular el porcentaje de cobertura"
   exit 1
 fi
 
-COVERAGE=$(echo "$SUMMARY_LINE" | grep -oE '[0-9]+\.[0-9]+%' | head -1 | tr -d '%')
+echo "-> Cobertura neta obtenida: ${COVERAGE_PERCENT}%"
 
-if [ -z "$COVERAGE" ]; then
-  echo "ERROR: No se pudo parsear el porcentaje de cobertura."
+RESULT=$(echo "$COVERAGE_PERCENT < $MIN_COVERAGE" | bc)
+
+if [ "$RESULT" -eq 1 ]; then
+  echo "FALLO: la cobertura (${COVERAGE_PERCENT}%) es menor al mínimo requerido (${MIN_COVERAGE}%)."
   exit 1
-fi
-
-echo "==> Cobertura neta obtenida: ${COVERAGE}%"
-echo "==> Umbral mínimo requerido: ${MIN_COVERAGE}%"
-
-PASSES=$(echo "$COVERAGE >= $MIN_COVERAGE" | bc -l)
-
-if [ "$PASSES" -eq 1 ]; then
-  echo "✅ Cobertura aprobada (${COVERAGE}% >= ${MIN_COVERAGE}%)."
-  exit 0
 else
-  echo "❌ ERROR: La cobertura (${COVERAGE}%) está por debajo del umbral de ${MIN_COVERAGE}%."
-  exit 1
+  echo "EXITO: la cobertura (${COVERAGE_PERCENT}%) cumple con el mínimo requerido (${MIN_COVERAGE}%)."
+  exit 0
 fi
